@@ -10,16 +10,7 @@ st.set_page_config(
     page_title="HR Offer Analytics",
     layout="wide"
 )
-
 st.title("📊 HR Offer Analytics")
-
-# ================= ENV VALIDATION =================
-REQUIRED_VARS = ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_PORT", "DB_NAME"]
-missing_vars = [v for v in REQUIRED_VARS if not os.getenv(v)]
-
-if missing_vars:
-    st.error(f"❌ Missing environment variables: {', '.join(missing_vars)}")
-    st.stop()
 
 # ================= DB CONFIG =================
 TABLE_NAME = "offer"
@@ -42,9 +33,8 @@ def load_positions():
 
 positions_df = load_positions()
 
-# ================= FILTERS =================
+# ================= TOP FILTER BAR =================
 st.markdown("### 🔍 Filters")
-
 f1, f2, f3 = st.columns(3)
 
 with f1:
@@ -60,7 +50,10 @@ with f2:
     )
 
 with f3:
-    date_range = st.date_input("Created Date Range")
+    date_range = st.date_input(
+        "Created Date Range",
+        value=None
+    )
 
 st.divider()
 
@@ -68,19 +61,10 @@ st.divider()
 @st.cache_data(ttl=300)
 def fetch_data(candidate_response, position, date_range):
     query = f"""
-        SELECT
-            id,
-            email,
-            name,
-            position,
-            salary,
-            status,
-            candidate_response,
-            created_at
+        SELECT id, email, name, position, salary, status, candidate_response, created_at
         FROM {TABLE_NAME}
         WHERE 1=1
     """
-
     params = {}
 
     if candidate_response != "All":
@@ -99,17 +83,13 @@ def fetch_data(candidate_response, position, date_range):
     query += " ORDER BY id ASC"
 
     df = pd.read_sql(text(query), engine, params=params)
-
-    if "candidate_response" in df.columns:
-        df["candidate_response"] = df["candidate_response"].str.upper()
-
+    df["candidate_response"] = df["candidate_response"].str.upper()  # normalize values
     return df
 
 df = fetch_data(candidate_response, position, date_range)
 
 # ================= METRICS =================
 st.subheader("📌 Key Metrics")
-
 m1, m2, m3, m4 = st.columns(4)
 
 m1.metric("Total Offers", len(df))
@@ -117,20 +97,13 @@ m2.metric("Accepted", len(df[df["candidate_response"] == "ACCEPTED"]))
 m3.metric("Rejected", len(df[df["candidate_response"] == "REJECTED"]))
 m4.metric(
     "Pending",
-    len(
-        df[
-            (df["candidate_response"].isna()) |
-            (df["candidate_response"] == "PENDING")
-        ]
-    )
+    len(df[(df["candidate_response"].isna()) | (df["candidate_response"] == "PENDING")])
 )
 
 # ================= DATA TABLE =================
 st.subheader("📄 Offer Records")
-
 df_display = df.copy()
-df_display.insert(0, "S.No", range(1, len(df_display) + 1))
-
+df_display.insert(0, "S.No", range(1, len(df_display) + 1))  # optional serial number
 st.dataframe(df_display, use_container_width=True)
 
 st.divider()
@@ -156,11 +129,11 @@ def generate_pdf(dataframe):
     pdf.set_auto_page_break(auto=True, margin=10)
     pdf.add_page()
     pdf.set_font("Arial", size=8)
-
+    
     for _, row in dataframe.iterrows():
         pdf.multi_cell(0, 5, str(row.to_dict()))
         pdf.ln(1)
-
+    
     return pdf.output(dest="S").encode("latin-1")
 
 st.download_button(
